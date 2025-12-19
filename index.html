@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Portfolio Test Tracker</title>
+
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fb;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    h1, h2 {
+      color: #2563eb;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      text-align: center;
+    }
+
+    th {
+      background: #f0f4ff;
+    }
+
+    select {
+      padding: 5px;
+    }
+
+    .passed { color: green; font-weight: bold; }
+    .failed { color: red; font-weight: bold; }
+    .pending { color: orange; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Portfolio Overview</h1>
+
+  <input type="file" accept=".xlsx" onchange="loadExcel(event)" />
+
+  <!-- SUMMARY TABLE -->
+  <table>
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Passed</th>
+        <th>Failed</th>
+        <th>Pending</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="summaryTable"></tbody>
+  </table>
+
+  <h2>Test Case Management</h2>
+
+  <!-- TEST CASE TABLE -->
+  <table>
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>ID</th>
+        <th>Test Case</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="testCaseTable"></tbody>
+  </table>
+</div>
+
+<script>
+  let projects = {};
+
+  function loadExcel(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      projects = {};
+
+      rows.forEach((row, index) => {
+        const project =
+          row.Project ||
+          row.project ||
+          "Unknown Project";
+
+        const testName =
+          row.TestCase ||
+          row["Test Case"] ||
+          row.Test ||
+          `Test Case ${index + 1}`;
+
+        let status = (row.Status || "Pending").toString().toLowerCase();
+
+        if (status.includes("pass")) status = "passed";
+        else if (status.includes("fail")) status = "failed";
+        else status = "pending";
+
+        if (!projects[project]) projects[project] = [];
+
+        projects[project].push({
+          id: projects[project].length + 1,
+          name: testName,
+          status,
+        });
+      });
+
+      render();
+    };
+
+    reader.readAsArrayBuffer(file);
+  }
+
+  function getStatus(tests) {
+    const passed = tests.filter(t => t.status === "passed").length;
+    const failed = tests.filter(t => t.status === "failed").length;
+    const pending = tests.filter(t => t.status === "pending").length;
+
+    if (failed === tests.length) return "failed";
+    if (pending === 0) return "passed";
+    return "pending";
+  }
+
+  function updateStatus(project, id, status) {
+    const test = projects[project].find(t => t.id === id);
+    test.status = status;
+    render();
+  }
+
+  function render() {
+    const summary = document.getElementById("summaryTable");
+    const details = document.getElementById("testCaseTable");
+
+    summary.innerHTML = "";
+    details.innerHTML = "";
+
+    Object.entries(projects).forEach(([project, tests]) => {
+      const passed = tests.filter(t => t.status === "passed").length;
+      const failed = tests.filter(t => t.status === "failed").length;
+      const pending = tests.filter(t => t.status === "pending").length;
+      const status = getStatus(tests);
+
+      summary.innerHTML += `
+        <tr>
+          <td>${project}</td>
+          <td>${passed}</td>
+          <td>${failed}</td>
+          <td>${pending}</td>
+          <td class="${status}">${status}</td>
+        </tr>
+      `;
+
+      tests.forEach(test => {
+        details.innerHTML += `
+          <tr>
+            <td>${project}</td>
+            <td>${test.id}</td>
+            <td>${test.name}</td>
+            <td>
+              <select onchange="updateStatus('${project}', ${test.id}, this.value)">
+                <option value="pending" ${test.status==="pending"?"selected":""}>Pending</option>
+                <option value="passed" ${test.status==="passed"?"selected":""}>Passed</option>
+                <option value="failed" ${test.status==="failed"?"selected":""}>Failed</option>
+              </select>
+            </td>
+          </tr>
+        `;
+      });
+    });
+  }
+</script>
